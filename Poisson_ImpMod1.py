@@ -14,6 +14,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Available colormaps
+COLORMAPS = [
+    'viridis', 'plasma', 'inferno', 'magma', 'cividis',
+    'hot', 'cool', 'rainbow', 'jet', 'turbo',
+    'portland', 'blackbody', 'electric', 'viridis',
+    'plotly3', 'bluered', 'reds', 'blues', 'greens'
+]
+
 class PoissonImpedanceAnalyzer:
     def __init__(self, data):
         """
@@ -173,6 +181,14 @@ def main():
     Upload your CSV file with required columns (Vp, Vs, Rho) and optional columns (Gr, Sw, Vsh, RT).
     """)
     
+    # Initialize session state for colormaps
+    if 'colormap_tcca' not in st.session_state:
+        st.session_state.colormap_tcca = 'viridis'
+    if 'colormap_cross' not in st.session_state:
+        st.session_state.colormap_cross = 'viridis'
+    if 'colormap_3d' not in st.session_state:
+        st.session_state.colormap_3d = 'viridis'
+    
     # Sidebar for file upload and parameters
     st.sidebar.header("📁 Data Input")
     
@@ -236,6 +252,33 @@ def main():
                     fi_c = st.number_input("FI c value", value=1.5, step=0.1)
                 analyzer.li_c, analyzer.fi_c = li_c, fi_c
             
+            # Visualization settings
+            st.sidebar.header("🎨 Visualization Settings")
+            
+            st.sidebar.subheader("Colormap Settings")
+            col1, col2 = st.sidebar.columns(2)
+            with col1:
+                st.session_state.colormap_tcca = st.selectbox(
+                    "TCCA Plots", 
+                    COLORMAPS, 
+                    index=COLORMAPS.index(st.session_state.colormap_tcca),
+                    key="colormap_tcca"
+                )
+            with col2:
+                st.session_state.colormap_cross = st.selectbox(
+                    "Crossplots", 
+                    COLORMAPS, 
+                    index=COLORMAPS.index(st.session_state.colormap_cross),
+                    key="colormap_cross"
+                )
+            
+            st.session_state.colormap_3d = st.selectbox(
+                "3D Plot", 
+                COLORMAPS, 
+                index=COLORMAPS.index(st.session_state.colormap_3d),
+                key="colormap_3d"
+            )
+            
             # Main content area
             tab1, tab2, tab3, tab4, tab5 = st.tabs([
                 "📊 Data Overview", 
@@ -273,7 +316,7 @@ def main():
                 fig_corr = px.imshow(
                     numeric_data.corr(),
                     title="Correlation Matrix",
-                    color_continuous_scale='RdBu_r',
+                    color_continuous_scale=st.session_state.colormap_cross,
                     aspect="auto"
                 )
                 st.plotly_chart(fig_corr, use_container_width=True)
@@ -321,7 +364,13 @@ def main():
                             go.Scatter(x=c_range_li, y=li_correlations, 
                                       mode='lines+markers', name='LI Correlation',
                                       line=dict(color='blue', width=3),
-                                      marker=dict(size=6)),
+                                      marker=dict(
+                                          size=6,
+                                          color=li_correlations,
+                                          colorscale=st.session_state.colormap_tcca,
+                                          showscale=True,
+                                          colorbar=dict(title="Correlation")
+                                      )),
                             row=1, col=1
                         )
                         fig_tcca.add_vline(x=li_c, line_dash="dash", line_color="red", 
@@ -337,7 +386,13 @@ def main():
                             go.Scatter(x=c_range_fi, y=fi_correlations, 
                                       mode='lines+markers', name='FI Correlation',
                                       line=dict(color='green', width=3),
-                                      marker=dict(size=6)),
+                                      marker=dict(
+                                          size=6,
+                                          color=fi_correlations,
+                                          colorscale=st.session_state.colormap_tcca,
+                                          showscale=True,
+                                          colorbar=dict(title="Correlation")
+                                      )),
                             row=1, col=2
                         )
                         fig_tcca.add_vline(x=fi_c, line_dash="dash", line_color="red", 
@@ -357,25 +412,27 @@ def main():
                 
                 # Determine available columns for plotting
                 available_columns = current_data.columns.tolist()
+                numeric_columns = [col for col in available_columns if pd.api.types.is_numeric_dtype(current_data[col])]
+                
                 plots = []
                 
                 if 'Gr' in available_columns:
-                    plots.append(('Gr', 'Gamma Ray', 'LI', 'Lithology Impedance (LI)', 'viridis'))
+                    plots.append(('Gr', 'Gamma Ray', 'LI', 'Lithology Impedance (LI)'))
                 if 'Vsh' in available_columns:
-                    plots.append(('Vsh', 'Volume of Shale', 'LI', 'Lithology Impedance (LI)', 'plasma'))
+                    plots.append(('Vsh', 'Volume of Shale', 'LI', 'Lithology Impedance (LI)'))
                 if 'Sw' in available_columns:
-                    plots.append(('Sw', 'Water Saturation', 'FI', 'Fluid Impedance (FI)', 'thermal'))
+                    plots.append(('Sw', 'Water Saturation', 'FI', 'Fluid Impedance (FI)'))
                 if 'RT' in available_columns:
-                    plots.append(('RT', 'Resistivity', 'FI', 'Fluid Impedance (FI)', 'electric'))
+                    plots.append(('RT', 'Resistivity', 'FI', 'Fluid Impedance (FI)'))
                 
                 if plots:
                     # Create subplots
                     fig_cross = make_subplots(
                         rows=1, cols=len(plots),
-                        subplot_titles=[f"{y_var} vs {x_var.split(' ')[0]}" for y_var, _, x_var, _, _ in plots]
+                        subplot_titles=[f"{y_var} vs {x_var.split(' ')[0]}" for y_var, _, x_var, _ in plots]
                     )
                     
-                    for idx, (col, title, imp_type, imp_name, colorscale) in enumerate(plots):
+                    for idx, (col, title, imp_type, imp_name) in enumerate(plots):
                         fig_cross.add_trace(
                             go.Scatter(
                                 x=current_data[imp_type],
@@ -383,10 +440,11 @@ def main():
                                 mode='markers',
                                 marker=dict(
                                     color=current_data[col],
-                                    colorscale=colorscale,
+                                    colorscale=st.session_state.colormap_cross,
                                     size=6,
                                     opacity=0.7,
-                                    colorbar=dict(title=title)
+                                    colorbar=dict(title=title),
+                                    showscale=True
                                 ),
                                 name=f'{title} vs {imp_name}',
                                 hovertemplate=f'{imp_name}: %{{x:.2f}}<br>{title}: %{{y:.2f}}<extra></extra>'
@@ -402,56 +460,124 @@ def main():
                 else:
                     st.info("No suitable columns found for crossplots")
                 
-                # 3D Crossplot
-                st.subheader("3D Crossplot")
-                color_var = None
-                for var in ['Gr', 'Vsh', 'Sw', 'RT']:
-                    if var in current_data.columns:
-                        color_var = var
-                        break
+                # 3D Crossplot with interactive axis selection
+                st.subheader("3D Interactive Crossplot")
                 
-                if color_var is None:
-                    color_var = 'LI'
+                col1, col2, col3, col4 = st.columns(4)
                 
-                if analyzer.depth_column:
-                    z_data = current_data[analyzer.depth_column]
-                    z_title = analyzer.depth_column
-                else:
-                    z_data = current_data.index
-                    z_title = 'Index'
+                with col1:
+                    x_axis = st.selectbox(
+                        "X-Axis",
+                        numeric_columns,
+                        index=numeric_columns.index('LI') if 'LI' in numeric_columns else 0,
+                        key="x_axis_3d"
+                    )
                 
+                with col2:
+                    y_axis = st.selectbox(
+                        "Y-Axis", 
+                        numeric_columns,
+                        index=numeric_columns.index('FI') if 'FI' in numeric_columns else 1,
+                        key="y_axis_3d"
+                    )
+                
+                with col3:
+                    z_axis = st.selectbox(
+                        "Z-Axis",
+                        numeric_columns,
+                        index=numeric_columns.index(analyzer.depth_column) if analyzer.depth_column in numeric_columns else 2,
+                        key="z_axis_3d"
+                    )
+                
+                with col4:
+                    color_axis = st.selectbox(
+                        "Color By",
+                        numeric_columns,
+                        index=numeric_columns.index('Gr') if 'Gr' in numeric_columns else 3,
+                        key="color_axis_3d"
+                    )
+                
+                # Create 3D plot with selected axes
                 fig_3d = go.Figure(data=[
                     go.Scatter3d(
-                        x=current_data['LI'],
-                        y=current_data['FI'],
-                        z=z_data,
+                        x=current_data[x_axis],
+                        y=current_data[y_axis],
+                        z=current_data[z_axis],
                         mode='markers',
                         marker=dict(
-                            size=4,
-                            color=current_data[color_var],
-                            colorscale='viridis',
-                            opacity=0.7,
-                            colorbar=dict(title=color_var)
+                            size=5,
+                            color=current_data[color_axis],
+                            colorscale=st.session_state.colormap_3d,
+                            opacity=0.8,
+                            colorbar=dict(title=color_axis),
+                            showscale=True
                         ),
                         hovertemplate=(
-                            f"LI: %{{x:.2f}}<br>"
-                            f"FI: %{{y:.2f}}<br>"
-                            f"{z_title}: %{{z:.2f}}<br>"
-                            f"{color_var}: %{{marker.color:.2f}}<extra></extra>"
+                            f"{x_axis}: %{{x:.2f}}<br>"
+                            f"{y_axis}: %{{y:.2f}}<br>"
+                            f"{z_axis}: %{{z:.2f}}<br>"
+                            f"{color_axis}: %{{marker.color:.2f}}<extra></extra>"
                         )
                     )
                 ])
                 
                 fig_3d.update_layout(
                     scene=dict(
-                        xaxis_title='Lithology Impedance (LI)',
-                        yaxis_title='Fluid Impedance (FI)',
-                        zaxis_title=z_title
+                        xaxis_title=x_axis,
+                        yaxis_title=y_axis,
+                        zaxis_title=z_axis
                     ),
-                    height=600
+                    height=700,
+                    title=f"3D Crossplot: {x_axis} vs {y_axis} vs {z_axis} (colored by {color_axis})"
                 )
                 
                 st.plotly_chart(fig_3d, use_container_width=True)
+                
+                # Additional 2D crossplot with variable selection
+                st.subheader("Custom 2D Crossplot")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    x_axis_2d = st.selectbox(
+                        "X-Axis (2D)",
+                        numeric_columns,
+                        index=numeric_columns.index('LI') if 'LI' in numeric_columns else 0,
+                        key="x_axis_2d"
+                    )
+                
+                with col2:
+                    y_axis_2d = st.selectbox(
+                        "Y-Axis (2D)",
+                        numeric_columns,
+                        index=numeric_columns.index('FI') if 'FI' in numeric_columns else 1,
+                        key="y_axis_2d"
+                    )
+                
+                with col3:
+                    color_axis_2d = st.selectbox(
+                        "Color By (2D)",
+                        numeric_columns,
+                        index=numeric_columns.index('Gr') if 'Gr' in numeric_columns else 2,
+                        key="color_axis_2d"
+                    )
+                
+                fig_2d_custom = px.scatter(
+                    current_data,
+                    x=x_axis_2d,
+                    y=y_axis_2d,
+                    color=color_axis_2d,
+                    color_continuous_scale=st.session_state.colormap_cross,
+                    title=f"{y_axis_2d} vs {x_axis_2d} (colored by {color_axis_2d})",
+                    hover_data=list(current_data.columns)
+                )
+                
+                fig_2d_custom.update_traces(
+                    marker=dict(size=8, opacity=0.7),
+                    selector=dict(mode='markers')
+                )
+                
+                st.plotly_chart(fig_2d_custom, use_container_width=True)
             
             with tab4:
                 st.header("Well Log Profiles")
@@ -463,13 +589,30 @@ def main():
                     depth = current_data.index
                     depth_label = 'Sample Index'
                 
+                # Colormap selection for profiles
+                col1, col2 = st.columns(2)
+                with col1:
+                    profile_colormap_1 = st.selectbox(
+                        "Basic Impedances Colormap",
+                        COLORMAPS,
+                        index=COLORMAPS.index('viridis'),
+                        key="profile_cmap_1"
+                    )
+                with col2:
+                    profile_colormap_2 = st.selectbox(
+                        "Poisson Impedances Colormap", 
+                        COLORMAPS,
+                        index=COLORMAPS.index('plasma'),
+                        key="profile_cmap_2"
+                    )
+                
                 fig_profiles = make_subplots(
                     rows=1, cols=3,
                     subplot_titles=('Basic Impedances', 'Poisson Impedance Derivatives', 'Reservoir Properties'),
                     horizontal_spacing=0.08
                 )
                 
-                # Basic impedances
+                # Basic impedances with colormap
                 fig_profiles.add_trace(
                     go.Scatter(x=current_data['Ip'], y=depth, 
                               mode='lines', name='P-Impedance (Ip)',
@@ -483,7 +626,7 @@ def main():
                     row=1, col=1
                 )
                 
-                # Derived impedances
+                # Derived impedances with colormap
                 fig_profiles.add_trace(
                     go.Scatter(x=current_data['LI'], y=depth, 
                               mode='lines', name='Lithology Impedance (LI)',
@@ -560,6 +703,15 @@ def main():
                         label="📥 Download Summary Statistics",
                         data=summary_csv,
                         file_name="poisson_impedance_summary.csv",
+                        mime="text/csv"
+                    )
+                    
+                    # Current filtered data download
+                    filtered_csv = current_data.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Download Filtered Data",
+                        data=filtered_csv,
+                        file_name="filtered_poisson_impedance.csv",
                         mime="text/csv"
                     )
                 
