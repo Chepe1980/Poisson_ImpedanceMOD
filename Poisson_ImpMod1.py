@@ -18,8 +18,8 @@ st.set_page_config(
 COLORMAPS = [
     'viridis', 'plasma', 'inferno', 'magma', 'cividis',
     'hot', 'cool', 'rainbow', 'jet', 'turbo',
-    'portland', 'blackbody', 'electric', 'viridis',
-    'plotly3', 'bluered', 'reds', 'blues', 'greens'
+    'portland', 'blackbody', 'electric', 'plotly3', 
+    'bluered', 'reds', 'blues', 'greens', 'viridis'
 ]
 
 class PoissonImpedanceAnalyzer:
@@ -173,6 +173,19 @@ class PoissonImpedanceAnalyzer:
         
         return analysis_data[['LI', 'FI']]
 
+# Initialize session state
+def initialize_session_state():
+    if 'colormap_tcca' not in st.session_state:
+        st.session_state.colormap_tcca = 'viridis'
+    if 'colormap_cross' not in st.session_state:
+        st.session_state.colormap_cross = 'viridis'
+    if 'colormap_3d' not in st.session_state:
+        st.session_state.colormap_3d = 'viridis'
+    if 'profile_cmap_1' not in st.session_state:
+        st.session_state.profile_cmap_1 = 'viridis'
+    if 'profile_cmap_2' not in st.session_state:
+        st.session_state.profile_cmap_2 = 'plasma'
+
 # Streamlit App
 def main():
     st.title("🎯 Poisson Impedance Analyzer")
@@ -181,13 +194,8 @@ def main():
     Upload your CSV file with required columns (Vp, Vs, Rho) and optional columns (Gr, Sw, Vsh, RT).
     """)
     
-    # Initialize session state for colormaps
-    if 'colormap_tcca' not in st.session_state:
-        st.session_state.colormap_tcca = 'viridis'
-    if 'colormap_cross' not in st.session_state:
-        st.session_state.colormap_cross = 'viridis'
-    if 'colormap_3d' not in st.session_state:
-        st.session_state.colormap_3d = 'viridis'
+    # Initialize session state
+    initialize_session_state()
     
     # Sidebar for file upload and parameters
     st.sidebar.header("📁 Data Input")
@@ -247,9 +255,9 @@ def main():
             if not auto_calculate:
                 col1, col2 = st.sidebar.columns(2)
                 with col1:
-                    li_c = st.number_input("LI c value", value=2.0, step=0.1)
+                    li_c = st.number_input("LI c value", value=2.0, step=0.1, key="li_c_manual")
                 with col2:
-                    fi_c = st.number_input("FI c value", value=1.5, step=0.1)
+                    fi_c = st.number_input("FI c value", value=1.5, step=0.1, key="fi_c_manual")
                 analyzer.li_c, analyzer.fi_c = li_c, fi_c
             
             # Visualization settings
@@ -258,26 +266,33 @@ def main():
             st.sidebar.subheader("Colormap Settings")
             col1, col2 = st.sidebar.columns(2)
             with col1:
-                st.session_state.colormap_tcca = st.selectbox(
+                new_colormap_tcca = st.selectbox(
                     "TCCA Plots", 
                     COLORMAPS, 
                     index=COLORMAPS.index(st.session_state.colormap_tcca),
-                    key="colormap_tcca"
+                    key="select_tcca_colormap"
                 )
+                if new_colormap_tcca != st.session_state.colormap_tcca:
+                    st.session_state.colormap_tcca = new_colormap_tcca
+                    
             with col2:
-                st.session_state.colormap_cross = st.selectbox(
+                new_colormap_cross = st.selectbox(
                     "Crossplots", 
                     COLORMAPS, 
                     index=COLORMAPS.index(st.session_state.colormap_cross),
-                    key="colormap_cross"
+                    key="select_cross_colormap"
                 )
+                if new_colormap_cross != st.session_state.colormap_cross:
+                    st.session_state.colormap_cross = new_colormap_cross
             
-            st.session_state.colormap_3d = st.selectbox(
+            new_colormap_3d = st.selectbox(
                 "3D Plot", 
                 COLORMAPS, 
                 index=COLORMAPS.index(st.session_state.colormap_3d),
-                key="colormap_3d"
+                key="select_3d_colormap"
             )
+            if new_colormap_3d != st.session_state.colormap_3d:
+                st.session_state.colormap_3d = new_colormap_3d
             
             # Main content area
             tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -592,19 +607,24 @@ def main():
                 # Colormap selection for profiles
                 col1, col2 = st.columns(2)
                 with col1:
-                    profile_colormap_1 = st.selectbox(
+                    new_profile_cmap_1 = st.selectbox(
                         "Basic Impedances Colormap",
                         COLORMAPS,
-                        index=COLORMAPS.index('viridis'),
-                        key="profile_cmap_1"
+                        index=COLORMAPS.index(st.session_state.profile_cmap_1),
+                        key="profile_cmap_1_select"
                     )
+                    if new_profile_cmap_1 != st.session_state.profile_cmap_1:
+                        st.session_state.profile_cmap_1 = new_profile_cmap_1
+                        
                 with col2:
-                    profile_colormap_2 = st.selectbox(
+                    new_profile_cmap_2 = st.selectbox(
                         "Poisson Impedances Colormap", 
                         COLORMAPS,
-                        index=COLORMAPS.index('plasma'),
-                        key="profile_cmap_2"
+                        index=COLORMAPS.index(st.session_state.profile_cmap_2),
+                        key="profile_cmap_2_select"
                     )
+                    if new_profile_cmap_2 != st.session_state.profile_cmap_2:
+                        st.session_state.profile_cmap_2 = new_profile_cmap_2
                 
                 fig_profiles = make_subplots(
                     rows=1, cols=3,
@@ -612,7 +632,7 @@ def main():
                     horizontal_spacing=0.08
                 )
                 
-                # Basic impedances with colormap
+                # Basic impedances
                 fig_profiles.add_trace(
                     go.Scatter(x=current_data['Ip'], y=depth, 
                               mode='lines', name='P-Impedance (Ip)',
@@ -626,7 +646,7 @@ def main():
                     row=1, col=1
                 )
                 
-                # Derived impedances with colormap
+                # Derived impedances
                 fig_profiles.add_trace(
                     go.Scatter(x=current_data['LI'], y=depth, 
                               mode='lines', name='Lithology Impedance (LI)',
